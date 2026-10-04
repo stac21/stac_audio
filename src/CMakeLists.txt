@@ -31,11 +31,13 @@ set(
         ${INCLUDE_DIR}/instrument.hpp
         ${INCLUDE_DIR}/oscillators.hpp
         ${INCLUDE_DIR}/math.hpp
+        ${INCLUDE_DIR}/file_utils.hpp
 )
 
 add_library(${TARGET}
     menu.cpp
     tone.cpp
+    file_utils.cpp
     ${HEADER_FILES}
 )
 add_library(${TARGET}::${TARGET} ALIAS ${TARGET})

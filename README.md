@@ -1,7 +1,8 @@
-# audio_lib
-Library of Audio Related Utilities
+# StacAudio
+Collection of Audio Related Utilities to read audio files, play them in real-time, and manipulate the properties of their signal
 
-Requires the lfmq (my own library), portaudio, sndfile, and fftw3 libraries to be installed onto the system
+## Dependencies
+Requires the portaudio, sndfile, and fftw3 libraries to be installed onto the system
 
 ## Build Instructions:
 ```

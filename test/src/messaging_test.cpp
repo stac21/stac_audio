@@ -5,6 +5,8 @@
 #include <stac_audio/audio_thread_data.hpp>
 #include <stac_audio/dsp_utils.hpp>
 #include <stac_audio/tone.hpp>
+#include <stac_audio/oscillators.hpp>
+#include <stac_audio/file_utils.hpp>
 
 #include <portaudio.h>
 #include <sndfile.h>
@@ -33,7 +35,6 @@ bool process_pause_message(AudioThreadData& atd);
 bool process_volume_message(AudioThreadData& atd);
 bool process_stop_message(AudioThreadData& atd);
 bool process_effect_added(AudioThreadData& atd, const dsp::Signal<dsp::frame_real_t>* signal_ptr);
-std::optional<dsp::Signal<dsp::frame_real_t>> read_snd_file(const std::string& file_path);
 std::optional<dsp::Signal<dsp::frame_real_t>> generate_sin_wave(dsp::frequency_hz_t frequency, dsp::sample_rate_t sample_rate, dsp::time_ms_t duration);
 void display_options();
 stac::lfmq::MessageType process_user_input();
@@ -42,12 +43,13 @@ stac::lfmq::SpscQueue<stac::lfmq::Message<>, 10> g_message_queue;
 int main() {
 	static constexpr char FILE_PATH[] = "C:/Users/MyNam/source/repos/audio_lib/test/file.wav";
 	//static constexpr char FILE_PATH[] = "/home/grant/projects/git/audio_lib/test/file.wav";
-	std::optional<dsp::Signal<dsp::frame_real_t>> signal;
-	signal = read_snd_file(&FILE_PATH[0]);
+	// std::optional<dsp::Signal<dsp::frame_real_t>> signal;
+	// signal = read_snd_file(&FILE_PATH[0]);
+	std::expected<dsp::Signal<dsp::frame_real_t>, int> signal = stac::file_utils::read_snd_file(&FILE_PATH[0]);
 
 	if (!signal.has_value()) {
-		std::cout << "Unable to open file for reading: " << &FILE_PATH[0] << "\n";
-		return 1;
+		std::cout << "Unable to open file for reading: " << &FILE_PATH[0] << ", error: " << signal.error() << ", error string: " << sf_error_number(signal.error()) << "\n";
+		return signal.error();
 	}
 
 	std::future<int32_t> audio_t = std::async(std::launch::async, audio_thread, signal.value());
@@ -291,44 +293,6 @@ bool process_effect_added(AudioThreadData& atd, const dsp::Signal<dsp::frame_rea
 	return true;
 }
 
-std::optional<dsp::Signal<dsp::frame_real_t>> read_snd_file(const std::string& file_path) {
-	SF_INFO sf_info;
-	SNDFILE* sf = sf_open(file_path.c_str(), SFM_READ, &sf_info);
-
-	if (sf == nullptr) {
-		return std::nullopt;
-	}
-
-	std::cout << "sf_info.channels: " << sf_info.channels << "\n";
-
-	dsp::Signal<dsp::frame_real_t> signal;
-
-	signal.sample_rate = sf_info.samplerate;
-
-	sf_count_t curr_frames_read = 0;
-	constexpr sf_count_t NUM_FRAMES_TO_READ = 256;
-	std::array<dsp::sample_real_t, NUM_FRAMES_TO_READ> in_buffer = {};
-	dsp::frame_real_t curr_frame;
-
-	do {
-		curr_frames_read = sf_readf_float(sf, in_buffer.data(), in_buffer.size());
-		// insert the read frames into the signal
-		for (size_t i = 0; i < in_buffer.size(); i += sf_info.channels) {
-			curr_frame.left_sample = in_buffer.at(i);
-
-			if (sf_info.channels == 1) {
-				curr_frame.right_sample = in_buffer.at(i);
-			} else {
-				curr_frame.right_sample = in_buffer.at(i + 1);
-			}
-
-			signal.samples.push_back(curr_frame);
-		}
-	} while (curr_frames_read == NUM_FRAMES_TO_READ);
-
-	return signal;
-}
-
 std::optional<dsp::Signal<dsp::frame_real_t>> generate_sin_wave(const dsp::frequency_hz_t frequency, dsp::sample_rate_t sample_rate, const dsp::time_ms_t duration) {
 	// important to note that the phase of the end resulting signal
 	// does not matter, but the relative phase of the harmonic signals
@@ -423,9 +387,7 @@ stac::lfmq::MessageType process_user_input() {
 			// It's fine to not check has_value here because I know that the operation will succeed
 			// but the result of a signal generation should be checked generally
 			static dsp::Signal<dsp::frame_real_t> signal = generate_sin_wave(tone.frequency(), dsp::DEFAULT_SAMPLE_RATE, signal_duration).value();
-			const dsp::utils::WriteResult write_result = dsp::utils::write_signal_to_file(signal, "/home/grant/projects/git/audio_lib/plots/signal.sig");
-
-			std::cout << "result of writing signal to file: " << static_cast<int32_t>(write_result) << "\n";
+			std::cout << "result of writing signal to file: " << static_cast<uint32_t>(write_result) << "\n";
 
 			msg.set_payload(&signal);
 

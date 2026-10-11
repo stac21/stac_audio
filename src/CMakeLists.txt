@@ -44,8 +44,8 @@ add_library(${TARGET}::${TARGET} ALIAS ${TARGET})
 
 set_target_properties(${TARGET}
     PROPERTIES
-    CMAKE_CXX_STANDARD 20
-    CMAKE_CXX_STANDARD_REQUIRED 20
+    CMAKE_CXX_STANDARD 23
+    CMAKE_CXX_STANDARD_REQUIRED 23
 )
 
 target_link_libraries(${TARGET} PUBLIC PortAudio::portaudio)

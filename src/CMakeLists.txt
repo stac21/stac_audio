@@ -32,6 +32,7 @@ set(
         ${INCLUDE_DIR}/oscillators.hpp
         ${INCLUDE_DIR}/math.hpp
         ${INCLUDE_DIR}/file_utils.hpp
+        ${INCLUDE_DIR}/interpolator.hpp
 )
 
 add_library(${TARGET}

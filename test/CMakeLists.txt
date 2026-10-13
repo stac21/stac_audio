@@ -7,12 +7,16 @@ find_package(stac_audio REQUIRED)
 
 set(AUDIO_TEST audio_test)
 set(MESSAGING_TEST messaging_test)
+set(TEST_INTERPOLATOR test_interpolator)
 
 add_executable(${AUDIO_TEST} src/main.cpp)
 add_executable(${MESSAGING_TEST} src/messaging_test.cpp)
+add_executable(${TEST_INTERPOLATOR} src/test_interpolator.cpp)
 
 target_link_libraries(${AUDIO_TEST} PRIVATE stac_audio::stac_audio)
 target_link_libraries(${MESSAGING_TEST} PRIVATE stac_audio::stac_audio)
+target_link_libraries(${TEST_INTERPOLATOR} PRIVATE stac_audio::stac_audio)
 
 target_include_directories(${AUDIO_TEST} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(${MESSAGING_TEST} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(${TEST_INTERPOLATOR} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

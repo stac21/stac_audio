@@ -38,6 +38,15 @@ struct AudioThreadData {
 	/// TODO implement the dft functionality
 	fftw_plan                                              r2c_plan         = nullptr;
 	fftw_plan                                              c2r_plan         = nullptr;
+	/**
+	 * Buffer used to share samples between audio thread and controller thread
+	 * for debugging purposes. Of course, make sure to reserve all needed memory
+	 * in the controller thread before passing it to the audio thread since the audio
+	 * thread can't make syscalls and thus won't be able to actually add samples
+	 * without memory already being reserved
+	 */
+	dsp::Signal<dsp::frame_real_t>*                        debug_buffer     = nullptr;
+	bool                                                   record_debug_samples = false;
 };
 
 /*

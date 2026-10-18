@@ -199,6 +199,15 @@ int32_t audio_thread_callback(const void* input_buffer, void* output_buffer,
 		break;
 	}
 
+	if (atd.state_transition.has_value() && atd.state_transition->transition_condition(atd)) {
+		// TODO add real-time-safe logging for state transitions similar to below
+		// std::cout << "Condition reached. Moving from " << static_cast<uint32_t>(atd.state) << " to " << static_cast<uint32_t>(atd.state_transition->next_state) << "\n";
+		atd.state = atd.state_transition->next_state;
+
+		// reset the transition state so that we aren't continuously trying to transition to next_state
+		atd.state_transition = std::nullopt;
+	}
+
 	return ret;
 }
 

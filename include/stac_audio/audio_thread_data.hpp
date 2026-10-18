@@ -1,20 +1,31 @@
 #pragma once
 
 #include <complex>
+#include <functional>
+#include <optional>
 #include <tuple>
 #include <fftw3.h>
 #include "dsp_declarations.hpp"
 #include "signals.hpp"
 
 enum class AudioThreadState {
-	PLAYING,
-	PAUSED,
-	IDLE,
-	STARTING
+	PLAYING = 0,
+	PAUSED = 1,
+	IDLE = 2,
+	STARTING = 3
+};
+
+struct AudioThreadData;
+
+struct StateTransition {
+	AudioThreadState next_state = AudioThreadState::IDLE;
+	std::function<bool(const AudioThreadData&)> transition_condition;
 };
 
 struct AudioThreadData {
 	AudioThreadState                                       state            = AudioThreadState::IDLE;
+	/// The next state to transition to. If there is no next state to transition to then this will have no value
+	std::optional<StateTransition>                         state_transition = std::nullopt;
 	const dsp::Signal<dsp::frame_real_t>*                  signal           = nullptr;
 	dsp::Signal<dsp::frame_real_t, dsp::FRAMES_PER_BUFFER> wave;
 	size_t                                                 sample_index     = 0;

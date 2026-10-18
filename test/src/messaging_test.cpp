@@ -57,15 +57,6 @@ int main() {
 		return stac::generate_sin_signal<dsp::frame_real_t>(frequency, sample_rate);
 	};
 	// std::optional<stac::Instrument<dsp::sample_t>> instrument = stac::Instrument<dsp::sample_t>::create(gen_sin_wave, dsp::SAMPLE_RATE, 1000);
-	stac::Tone tone;
-	tone.set_note(stac::Note::A);
-	tone.set_octave(stac::Octave::FOUR);
-	dsp::Signal<dsp::frame_real_t> sin_signal = stac::generate_sin_signal<dsp::frame_real_t>(tone.frequency(), dsp::DEFAULT_SAMPLE_RATE);
-	static constexpr char sin_signal_path[] = "C:/Users/Mynam/source/repos/audio_lib/plots/sin_signal.sig";
-	// static constexpr char sin_signal_path[] = "/home/grant/projects/git/audio_lib/plots/sin_signal.sig";
-	stac::file_utils::WriteResult result = stac::file_utils::write_signal_to_file(sin_signal, &sin_signal_path[0]);
-
-	std::cout << "signal write result: " << static_cast<uint32_t>(result) << "\n";
 
 	std::future<int32_t> audio_t = std::async(std::launch::async, audio_thread, signal.value());
 	stac::lfmq::MessageType msg_type = stac::lfmq::MessageType::UNKNOWN;
@@ -389,33 +380,21 @@ stac::lfmq::MessageType process_user_input() {
 		msg_metadata.type = stac::lfmq::MessageType::STOP;
 		break;
 	case UserChoices::PLAY_NOTE:
-		if (std::optional<stac::Tone> toneOpt = stac::Tone::create(stac::Note::A, stac::Octave::TWO); toneOpt.has_value()) {
-			const stac::Tone& tone = toneOpt.value();
+	{
+		static constexpr stac::Tone tone = { .note = stac::Note::C, .octave = stac::Octave::ZERO };
 
-			msg_metadata.type = stac::lfmq::MessageType::EFFECT_ADDED;
+		static const dsp::Signal<dsp::frame_real_t> signal = {
+			.sample_rate = dsp::DEFAULT_SAMPLE_RATE,
+			.samples = stac::generate_sin_signal<dsp::frame_real_t>(tone.frequency(), dsp::DEFAULT_SAMPLE_RATE)
+		};
 
-			static constexpr dsp::time_ms_t signal_duration = 3000;
 
-			// TODO this should really go into a controller-type class
-			// but this will do for now
-			//
-			// It's fine to not check has_value here because I know that the operation will succeed
-			// but the result of a signal generation should be checked generally
-			static dsp::Signal<dsp::frame_real_t> signal = generate_sin_wave(tone.frequency(), dsp::DEFAULT_SAMPLE_RATE, signal_duration).value();
-			static constexpr  char FILE_PATH[] = "C:/Users/MyNam/source/repos/audio_lib/plots/signal.sig";
-			// static constexpr FILE_PATH[] = "/home/grant/projects/git/audio_lib/plots/signal.sig";
-			const stac::file_utils::WriteResult write_result = stac::file_utils::write_signal_to_file(signal, FILE_PATH);
-
-			std::cout << "result of writing signal to file: " << static_cast<uint32_t>(write_result) << "\n";
-
-			msg.set_payload(&signal);
-
-			std::cout << "Made effect added message\n";
-		} else {
-			std::cout << "Unable to create tone\n";
-
-			msg_metadata.type = stac::lfmq::MessageType::UNKNOWN;
-		}
+		msg_metadata.type = stac::lfmq::MessageType::EFFECT_ADDED;
+		msg.set_payload(&signal);
+		break;
+	}
+	case UserChoices::RECORD_DEBUG_SAMPLES:
+		msg_metadata.type = stac::lfmq::MessageType::RECORD_DEBUG_SAMPLES;
 		break;
 	default:
 		msg_metadata.type = stac::lfmq::MessageType::UNKNOWN;

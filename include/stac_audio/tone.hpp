@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 
 #include "dsp_declarations.hpp"
 
@@ -43,60 +42,18 @@ enum class Octave : uint8_t {
 constexpr uint8_t NUM_SEMITONES = static_cast<uint8_t>(Note::NUM_ENTRIES) * static_cast<uint8_t>(Octave::NUM_ENTRIES);
 
 struct Tone {
-	Tone() = default;
-
-	/**
-	 * @brief  Create a new instance of a Tone, checking whether the note and octave are valid values before setting
-	 * @note   Tone remains unchanged if arguments are invalid values (>= NUM_ENTRIES)
-	 * @return Whether the note and octave are valid values (both < NUM_ENTRIES) and were set
-	 */
-	static constexpr std::optional<Tone> create(const Note note, const Octave octave) noexcept {
-		if (note >= Note::NUM_ENTRIES || octave >= Octave::NUM_ENTRIES) {
-			return std::nullopt;
-		}
-
-		return Tone(note, octave);
-	}
-
-	/**
-	 * @brief  Set the tone's note, checking whether the note is a valid value before setting.
-	 * @note   Tone remains unchanged if argument is an invalid value (>= NUM_ENTRIES)
-	 * @return Whether the note is a valid value (< NUM_ENTRIES) and was set
-	 */
-	bool set_note(Note note) noexcept;
-	/**
-	 * @brief  Set the tone's octave, checking whether the octave is a valid value before setting
-	 * @note   Tone remains unchanged if argument is an invalid value (>= NUM_ENTRIES)
-	 * @return Whether the octave is a valid value (< NUM_ENTRIES) and was set
-	 */
-	bool set_octave(Octave octave) noexcept;
-
-	constexpr Note note() const noexcept {
-		return this->m_note;
-	}
-
-	constexpr Octave octave() const noexcept {
-		return this->m_octave;
-	}
+	Note   note   = Note::C;
+	Octave octave = Octave::ZERO;
 
 	/**
 	 * @brief  Return the frequency corresponding to the note and octave of the tone
 	 * @return The frequency corresponding to the note and octave of the tone
 	 */
 	constexpr dsp::frequency_hz_t frequency() const {
-		/*
-		 * m_note and m_octave are guaranteed to be within the range of frequencies so no need to do
-		 * bounds checking in this function, it is done in the setters of this class
-		 */
-		return Tone::frequencies[static_cast<uint8_t>(this->m_note)][static_cast<uint8_t>(this->m_octave)];
+		return Tone::frequencies[static_cast<uint8_t>(this->note)][static_cast<uint8_t>(this->octave)];
 	}
 
 private:
-	constexpr Tone(const Note note, const Octave octave) :
-		m_note(note),
-		m_octave(octave)
-	{}
-
 	/*
 	 * Note: keeping this a C-style array to ensure contiguous memory
 	 * while still maintaining the simple [i][j] notation
@@ -119,8 +76,5 @@ private:
 
 	static_assert(sizeof(Tone::frequencies) / sizeof(Tone::frequencies[0]) == static_cast<uint8_t>(Note::NUM_ENTRIES), "Number of rows in frequency matrix must == Note::NUM_ENTRIES");
 	static_assert(sizeof(Tone::frequencies[0]) / sizeof(dsp::frequency_hz_t) == static_cast<uint8_t>(Octave::NUM_ENTRIES), "Number of columns in frequency matrix must == Octave::NUM_ENTRIES");
-
-	Note   m_note   = Note::C;
-	Octave m_octave = Octave::ZERO;
 };
 }

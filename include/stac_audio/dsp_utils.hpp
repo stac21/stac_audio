@@ -30,15 +30,15 @@ constexpr _sample_t db_to_amp(_sample_t sample) {
  * @param time Time in ms
  * @return Sample index corresponding to the time and sample rate
  */
-constexpr size_t sample_index_from_time(const sample_rate_t sample_rate, const dsp::time_t time) {
+constexpr size_t sample_index_from_time(const sample_rate_t sample_rate, const dsp::time_ms_floating_t time) {
 	return static_cast<size_t>(time * (sample_rate / 1000.0));
 }
 
-constexpr time_t frequency_to_period(const frequency_hz_t freq) {
+constexpr time_ms_floating_t frequency_to_period(const frequency_hz_t freq) {
 	return 1.0 / freq * 1000.0;
 }
 
-constexpr frequency_hz_t period_to_frequency(const dsp::time_t period) {
+constexpr frequency_hz_t period_to_frequency(const dsp::time_ms_floating_t period) {
 	return 1.0 / period * 1000.0;
 }
 

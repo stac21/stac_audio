@@ -1,11 +1,8 @@
 #pragma once
 
-#include <cstdint>
 #include <cmath>
-#include <fstream>
 
 #include "dsp_declarations.hpp"
-#include "signals.hpp"
 
 namespace dsp::utils {
 /**
@@ -36,4 +33,13 @@ constexpr _sample_t db_to_amp(_sample_t sample) {
 constexpr size_t sample_index_from_time(const sample_rate_t sample_rate, const time_ms_t time) {
 	return static_cast<size_t>(time * (sample_rate / 1000.0));
 }
+
+constexpr time_t frequency_to_period(const frequency_hz_t freq) {
+	return 1.0 / freq * 1000.0;
+}
+
+constexpr frequency_hz_t period_to_frequency(const dsp::time_t period) {
+	return 1.0 / period * 1000.0;
+}
+
 } // namespace dsp::utils

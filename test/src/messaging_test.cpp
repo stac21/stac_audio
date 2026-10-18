@@ -36,7 +36,7 @@ bool process_pause_message(AudioThreadData& atd);
 bool process_volume_message(AudioThreadData& atd);
 bool process_stop_message(AudioThreadData& atd);
 bool process_effect_added(AudioThreadData& atd, const dsp::Signal<dsp::frame_real_t>* signal_ptr);
-std::optional<dsp::Signal<dsp::frame_real_t>> generate_sin_wave(dsp::frequency_hz_t frequency, dsp::sample_rate_t sample_rate, dsp::time_ms_t duration);
+bool process_record_debug_samples(AudioThreadData& atd);
 void display_options();
 stac::lfmq::MessageType process_user_input();
 stac::lfmq::SpscQueue<stac::lfmq::Message<>, 10> g_message_queue;
@@ -98,6 +98,11 @@ int32_t audio_thread(dsp::Signal<dsp::frame_real_t> signal) {
 
 	atd.signal = &signal;
 
+	dsp::Signal<dsp::frame_real_t> debug_signal;
+	atd.debug_buffer = &debug_signal;
+	atd.debug_buffer->sample_rate = atd.signal->sample_rate;
+	atd.debug_buffer->samples.reserve(dsp::FRAMES_PER_BUFFER * 1000);
+
 	PaStream* stream = nullptr;
 
 	err = Pa_OpenStream(&stream, nullptr, &stream_params, atd.signal->sample_rate, dsp::FRAMES_PER_BUFFER,
@@ -126,7 +131,19 @@ int32_t audio_thread(dsp::Signal<dsp::frame_real_t> signal) {
 	std::cout << "Closed stream\n";
 
 	err = Pa_Terminate();
-	CHECK_PA_ERROR(err)
+	CHECK_PA_ERROR(err);
+
+	if (!atd.debug_buffer->samples.empty()) {
+		std::cout << "Writing debug samples to disk\n";
+
+		const std::filesystem::path path(stac::file_utils::get_executable_path().value() / "debug_buffer.sig");
+
+		const  stac::file_utils::WriteResult write_result = stac::file_utils::write_signal_to_file(*atd.debug_buffer, path.string());
+
+		if (write_result != stac::file_utils::WriteResult::SUCCESS) {
+			std::cout << "Failed to write debug buffer to " << path << ", error: " << static_cast<uint32_t>(write_result) << "\n";
+		}
+	}
 
 	std::cout << "Audio thread finished execution\n";
 
@@ -137,6 +154,7 @@ int32_t audio_thread_callback(const void* input_buffer, void* output_buffer,
 		unsigned long frames_per_buffer, const PaStreamCallbackTimeInfo* time_info,
 		PaStreamCallbackFlags status_flags, void* user_data) {
 	PaStreamCallbackResult ret = paContinue;
+
 	if (user_data == nullptr) {
 		std::cout << "user_data is null\n";
 		return paComplete;
@@ -214,6 +232,16 @@ int32_t audio_thread_callback(const void* input_buffer, void* output_buffer,
 		atd.state_transition = std::nullopt;
 	}
 
+	if (atd.record_debug_samples) {
+		for (size_t i = 0; i < out_buf_len && atd.debug_buffer->samples.size() < atd.debug_buffer->samples.capacity(); i += dsp::NUM_CHANNELS) {
+			atd.debug_buffer->samples.emplace_back(out_buf[i], out_buf[i + 1]);
+		}
+
+		if (atd.debug_buffer->samples.size() == atd.debug_buffer->samples.capacity()) {
+			atd.record_debug_samples = false;
+		}
+	}
+
 	return ret;
 }
 
@@ -255,6 +283,9 @@ bool process_message(AudioThreadData& atd, const stac::lfmq::Message<>& msg) {
 		successfully_processed = process_effect_added(atd, signal_ptr);
 		break;
 	}
+	case stac::lfmq::MessageType::RECORD_DEBUG_SAMPLES:
+		successfully_processed = process_record_debug_samples(atd);
+		break;
 	default:
 		successfully_processed = false;
 		break;
@@ -312,35 +343,10 @@ bool process_effect_added(AudioThreadData& atd, const dsp::Signal<dsp::frame_rea
 	return true;
 }
 
-std::optional<dsp::Signal<dsp::frame_real_t>> generate_sin_wave(const dsp::frequency_hz_t frequency, dsp::sample_rate_t sample_rate, const dsp::time_ms_t duration) {
-	// important to note that the phase of the end resulting signal
-	// does not matter, but the relative phase of the harmonic signals
-	// does matter as they can constructively or destructively combine
-	// to make the signal louder or quieter. Also could change the
-	// timbre of the resulting signal
-	// https://pudding.cool/2018/02/waveforms/
-	static constexpr float ms_to_seconds = 1000.0f;
-	const size_t num_samples_in_signal = static_cast<size_t>((duration / ms_to_seconds) * sample_rate);
-	std::cout << "num_samples_in_signal: " << num_samples_in_signal << "\n";
-	std::cout << "frequency: " << frequency << "\n";
+bool process_record_debug_samples(AudioThreadData& atd) {
+	atd.record_debug_samples = true;
 
-	dsp::Signal<dsp::frame_real_t> signal(sample_rate);
-	try {
-		signal.samples.reserve(num_samples_in_signal);
-	} catch (std::bad_alloc& e) {
-		// the requested buffer size was too large to allocate
-		return std::nullopt;
-	}
-
-	dsp::sample_real_t curr_sample = 0.0;
-
-	for (size_t sample_index = 0; sample_index < num_samples_in_signal; sample_index++) {
-		curr_sample = static_cast<dsp::sample_real_t>(std::sin(frequency * 2 * std::numbers::pi * (static_cast<double>(sample_index) / sample_rate)));
-
-		signal.samples.emplace_back(curr_sample, curr_sample);
-	}
-
-	return signal;
+	return true;
 }
 
 enum class UserChoices : uint8_t {
@@ -348,7 +354,8 @@ enum class UserChoices : uint8_t {
 	PAUSE_OR_RESUME_AUDIO     = 2,
 	TOGGLE_MUTE               = 3,
 	STOP_PLAYBACK             = 4,
-	PLAY_NOTE                 = 5
+	PLAY_NOTE                 = 5,
+	RECORD_DEBUG_SAMPLES      = 6
 };
 
 void display_options() {
@@ -358,6 +365,7 @@ void display_options() {
 		<< static_cast<int32_t>(UserChoices::TOGGLE_MUTE)               << ". Toggle Mute\n"
 		<< static_cast<int32_t>(UserChoices::STOP_PLAYBACK)             << ". Stop\n"
 		<< static_cast<int32_t>(UserChoices::PLAY_NOTE)                 << ". Play Note\n"
+		<< static_cast<int32_t>(UserChoices::RECORD_DEBUG_SAMPLES)      << ". Record Debug Samples\n"
 		<< "Selected option: ";
 }
 

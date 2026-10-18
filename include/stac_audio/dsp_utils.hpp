@@ -42,4 +42,10 @@ constexpr frequency_hz_t period_to_frequency(const dsp::time_ms_floating_t perio
 	return 1.0 / period * 1000.0;
 }
 
+constexpr size_t get_num_samples_in_frequency_cycle(const sample_rate_t sample_rate, const frequency_hz_t freq) {
+	const dsp::time_ms_floating_t period = dsp::utils::frequency_to_period(freq);
+
+	return dsp::utils::sample_index_from_time(sample_rate, period);
+}
+
 } // namespace dsp::utils

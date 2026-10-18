@@ -17,7 +17,8 @@ enum class MessageType {
 	EFFECT_REMOVED,  // An effect has been removed by the user
 	EFFECT_ENABLED,  // Enable an effect
 	EFFECT_DISABLED, // Disable an effect
-	PLAY_AT          // begin playing at specific time or frame index
+	PLAY_AT,         // begin playing at specific time or frame index
+	RECORD_DEBUG_SAMPLES // begin recording samples to place into the debug buffer
 };
 
 struct MessageMetadata {

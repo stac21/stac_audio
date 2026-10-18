@@ -36,7 +36,6 @@ set(
 
 add_library(${TARGET}
     menu.cpp
-    tone.cpp
     file_utils.cpp
     ${HEADER_FILES}
 )

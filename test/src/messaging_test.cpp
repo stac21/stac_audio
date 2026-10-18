@@ -374,30 +374,18 @@ stac::lfmq::MessageType process_user_input() {
 		msg_metadata.type = stac::lfmq::MessageType::STOP;
 		break;
 	case UserChoices::PLAY_NOTE:
-		if (std::optional<stac::Tone> toneOpt = stac::Tone::create(stac::Note::A, stac::Octave::TWO); toneOpt.has_value()) {
-			const stac::Tone& tone = toneOpt.value();
+	{
+		static constexpr stac::Tone tone = { .note = stac::Note::C, .octave = stac::Octave::ZERO };
 
-			msg_metadata.type = stac::lfmq::MessageType::EFFECT_ADDED;
+		static const dsp::Signal<dsp::frame_real_t> signal = {
+			.sample_rate = dsp::DEFAULT_SAMPLE_RATE,
+			.samples = stac::generate_sin_signal<dsp::frame_real_t>(tone.frequency(), dsp::DEFAULT_SAMPLE_RATE)
+		};
 
-			static constexpr dsp::time_ms_t signal_duration = 3000;
-
-			// TODO this should really go into a controller-type class
-			// but this will do for now
-			//
-			// It's fine to not check has_value here because I know that the operation will succeed
-			// but the result of a signal generation should be checked generally
-			static dsp::Signal<dsp::frame_real_t> signal = generate_sin_wave(tone.frequency(), dsp::DEFAULT_SAMPLE_RATE, signal_duration).value();
-			std::cout << "result of writing signal to file: " << static_cast<uint32_t>(write_result) << "\n";
-
-			msg.set_payload(&signal);
-
-			std::cout << "Made effect added message\n";
-		} else {
-			std::cout << "Unable to create tone\n";
-
-			msg_metadata.type = stac::lfmq::MessageType::UNKNOWN;
-		}
+		msg_metadata.type = stac::lfmq::MessageType::EFFECT_ADDED;
+		msg.set_payload(&signal);
 		break;
+	}
 	default:
 		msg_metadata.type = stac::lfmq::MessageType::UNKNOWN;
 		break;

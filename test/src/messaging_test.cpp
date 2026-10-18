@@ -8,6 +8,7 @@
 #include <stac_audio/instrument.hpp>
 #include <stac_audio/oscillators.hpp>
 #include <stac_audio/file_utils.hpp>
+#include <stac_audio/interpolator.hpp>
 
 #include <portaudio.h>
 #include <sndfile.h>
@@ -98,6 +99,16 @@ int32_t audio_thread(dsp::Signal<dsp::frame_real_t> signal) {
 
 	atd.signal = &signal;
 
+	// ramp-up and ramp-down within one call of the audio thread callback
+	{
+		static constexpr stac::Tone lowest_possible_tone = {stac::Note::C, stac::Octave::ZERO};
+		static constexpr size_t num_samples_in_lowest_possible_tone_cycle = dsp::utils::get_num_samples_in_frequency_cycle(dsp::DEFAULT_SAMPLE_RATE, lowest_possible_tone.frequency());
+		static constexpr uint32_t minimum_num_steps_to_gracefully_transition_volume = num_samples_in_lowest_possible_tone_cycle / 2;
+
+		atd.amplitude_interpolator.set_num_steps_to_reach_target(minimum_num_steps_to_gracefully_transition_volume);
+	}
+	atd.amplitude_interpolator.set_values(atd.amplitude_scalar, atd.amplitude_scalar);
+
 	dsp::Signal<dsp::frame_real_t> debug_signal;
 	atd.debug_buffer = &debug_signal;
 	atd.debug_buffer->sample_rate = atd.signal->sample_rate;
@@ -178,6 +189,14 @@ int32_t audio_thread_callback(const void* input_buffer, void* output_buffer,
 
 	switch (atd.state) {
 	case AudioThreadState::PLAYING:
+	{
+		// no need to do anything else
+		if (atd.is_muted && atd.amplitude_interpolator.is_target_reached()) {
+			memset(out_buf, static_cast<int>(dsp::SAMPLE_SILENCE), out_buf_size);
+
+			break;
+		}
+
 		// populate the wave
 		for (size_t i = 0; i < atd.wave.samples.size(); i++) {
 			// loop the audio
@@ -187,38 +206,31 @@ int32_t audio_thread_callback(const void* input_buffer, void* output_buffer,
 
 			atd.wave.samples.at(i) = atd.signal->samples.at(atd.sample_index);
 			atd.sample_index++;
-		}
 
-		// apply effects to the wave
-		for (dsp::frame_real_t& curr_frame : atd.wave.samples) {
-			// is the amplitude scalar applied before or after effects? It probably doesn't matter...
-			// at least not for filters
-			curr_frame.left_sample  *= atd.amplitude_scalar;
-			curr_frame.right_sample *= atd.amplitude_scalar;
-		}
+			dsp::frame_real_t& curr_frame = atd.wave.samples.at(i);
 
-		// copy wave into output buffer
-		for (size_t i = 0; i < atd.wave.samples.size(); i++) {
-			const dsp::frame_real_t& curr_frame = atd.wave.samples.at(i);
+			curr_frame *= atd.amplitude_interpolator.get_current_val();
 
-			if (i * dsp::NUM_CHANNELS + 1 < out_buf_len) {
-				out_buf[i * dsp::NUM_CHANNELS]     = curr_frame.left_sample;
-				out_buf[i * dsp::NUM_CHANNELS + 1] = curr_frame.right_sample;
-			} else {
-				// For debugging purposes. Should be replaced when a better debugging system is devised
-				std::cout << "Exceeded output buffer size\n";
-			}
+			atd.amplitude_interpolator.step();
+
+			// copy wave into output buffer
+			//
+			// I can almost certainly omit this step by assinging wave the address of out_buf in
+			// a view class of sorts (or via std::array's data() function) then manipulating
+			// out_buf in-place rather than atd.wave being a separate buffer. So in the future
+			// I should make this optimization to skip this step and thus save time in the hot loop
+			out_buf[i * dsp::NUM_CHANNELS]     = curr_frame.left_sample;
+			out_buf[i * dsp::NUM_CHANNELS + 1] = curr_frame.right_sample;
 		}
 
 		break;
+	}
 	case AudioThreadState::PAUSED:
-		// TODO figure out whether this memset only needs to occur once or whether
-		// it needs to occur every time the audio callback gets called.
-		// Answer: This almost certainly needs to be called once, though is cheap so who really cares
 		memset(out_buf, static_cast<int>(dsp::SAMPLE_SILENCE), out_buf_size);
 		break;
 	case AudioThreadState::IDLE:
-		std::cout << "Idle. Exiting loop\n";
+		// ensure final frames before exiting are muted and do not glitch
+		memset(out_buf, static_cast<int>(dsp::SAMPLE_SILENCE), out_buf_size);
 		ret = paComplete;
 		break;
 	}
@@ -314,8 +326,17 @@ bool process_play_message(AudioThreadData& atd, const dsp::time_ms_discrete_t ti
 bool process_pause_message(AudioThreadData& atd) {
 	if (atd.state == AudioThreadState::PAUSED) {
 		atd.state = AudioThreadState::PLAYING;
-	} else if (atd.state == AudioThreadState::PLAYING){
-		atd.state = AudioThreadState::PAUSED;
+
+		atd.amplitude_interpolator.set_values(atd.amplitude_interpolator.get_current_val(), atd.amplitude_scalar);
+	} else if (atd.state == AudioThreadState::PLAYING) {
+		// ensure volume is smoothly cut-off before pausing
+		StateTransition state_transition = {
+			.next_state = AudioThreadState::PAUSED,
+			.transition_condition = [](const AudioThreadData& data) { return data.amplitude_interpolator.is_target_reached(); }
+		};
+		atd.state_transition = std::move(state_transition);
+
+		atd.amplitude_interpolator.set_values(atd.amplitude_interpolator.get_current_val(), dsp::SAMPLE_SILENCE);
 	}
 
 	return true;
@@ -323,14 +344,23 @@ bool process_pause_message(AudioThreadData& atd) {
 
 bool process_volume_message(AudioThreadData& atd) {
 	// toggle the mute status of the audio stream
-	atd.amplitude_scalar = (static_cast<dsp::sample_real_t>(std::abs(atd.amplitude_scalar - 1.0))
-	                        <= std::numeric_limits<dsp::sample_real_t>::epsilon()) ? 0.0 : 1.0;
+	atd.is_muted = !atd.is_muted;
+
+	const dsp::amplitude_t target_amplitude = (atd.is_muted) ? 0.0 : atd.amplitude_scalar;
+
+	atd.amplitude_interpolator.set_values(atd.amplitude_interpolator.get_current_val(), target_amplitude);
 
 	return true;
 }
 
 bool process_stop_message(AudioThreadData& atd) {
-	atd.state = AudioThreadState::IDLE;
+	StateTransition state_transition = {
+		.next_state = AudioThreadState::IDLE,
+		.transition_condition = [](const AudioThreadData& data) { return data.amplitude_interpolator.is_target_reached(); }
+	};
+	atd.state_transition = std::move(state_transition);
+
+	atd.amplitude_interpolator.set_values(atd.amplitude_interpolator.get_current_val(), dsp::SAMPLE_SILENCE);
 
 	return true;
 }

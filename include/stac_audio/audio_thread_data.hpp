@@ -7,6 +7,7 @@
 #include <fftw3.h>
 #include "dsp_declarations.hpp"
 #include "signals.hpp"
+#include "interpolator.hpp"
 
 enum class AudioThreadState {
 	PLAYING = 0,
@@ -47,6 +48,8 @@ struct AudioThreadData {
 	 */
 	dsp::Signal<dsp::frame_real_t>*                        debug_buffer     = nullptr;
 	bool                                                   record_debug_samples = false;
+	stac::Interpolator<dsp::amplitude_t>                   amplitude_interpolator;
+	bool                                                   is_muted = false;
 };
 
 /*

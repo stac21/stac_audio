@@ -30,7 +30,7 @@ int32_t audio_thread_callback(const void* input_buffer, void* output_buffer,
 // returns the number of messages processed
 size_t process_messages(AudioThreadData& atd, const size_t num_messages);
 bool process_message(AudioThreadData& atd, const stac::lfmq::Message<>& msg);
-bool process_play_message(AudioThreadData& atd, const dsp::time_ms_t time);
+bool process_play_message(AudioThreadData& atd, const dsp::time_ms_discrete_t time);
 bool process_pause_message(AudioThreadData& atd);
 bool process_volume_message(AudioThreadData& atd);
 bool process_stop_message(AudioThreadData& atd);
@@ -230,7 +230,7 @@ bool process_message(AudioThreadData& atd, const stac::lfmq::Message<>& msg) {
 	switch (msg.metadata.type) {
 	case stac::lfmq::MessageType::PLAY_AT:
 	{
-		const dsp::time_ms_t play_time = msg.get_payload<dsp::time_ms_t>();
+		const dsp::time_ms_discrete_t play_time = msg.get_payload<dsp::time_ms_discrete_t>();
 		successfully_processed = process_play_message(atd, play_time);
 		break;
 	}
@@ -257,7 +257,11 @@ bool process_message(AudioThreadData& atd, const stac::lfmq::Message<>& msg) {
 	return successfully_processed;
 }
 
-bool process_play_message(AudioThreadData& atd, const dsp::time_ms_t time) {
+/*
+ * TODO: this should really fade between the audio at the current sample index and the
+ * one at the requested time so that audio glitches are avoided
+ */
+bool process_play_message(AudioThreadData& atd, const dsp::time_ms_discrete_t time) {
 	const size_t sample_index = dsp::utils::sample_index_from_time(atd.signal->sample_rate, time);
 
 	if (sample_index >= atd.signal->samples.size()) {
@@ -370,8 +374,8 @@ stac::lfmq::MessageType process_user_input() {
 	switch (static_cast<UserChoices>(option)) {
 	case UserChoices::PLAY_AUDIO_FROM_BEGINNING:
 		msg_metadata.type = stac::lfmq::MessageType::PLAY_AT;
-		// the cast to uint64_t is necessary so the Message is able to correctly deduce the type
-		msg.set_payload(static_cast<dsp::time_ms_t>(0));
+		// the cast is necessary so the Message is able to correctly deduce the type
+		msg.set_payload(static_cast<dsp::time_ms_discrete_t>(0));
 		break;
 	case UserChoices::PAUSE_OR_RESUME_AUDIO:
 		msg_metadata.type = stac::lfmq::MessageType::PAUSE;

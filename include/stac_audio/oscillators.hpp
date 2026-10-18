@@ -1,35 +1,39 @@
 #pragma once
 
+#include <vector>
 #include <iostream>
 #include <numbers>
 #include <cmath>
 
 #include "dsp_declarations.hpp"
-#include "signals.hpp"
 #include "dsp_utils.hpp"
+#include "type_traits.hpp"
 
 namespace stac {
-template<typename _sample_t>
-dsp::Signal<_sample_t> generate_sin_signal(const dsp::frequency_hz_t frequency, const dsp::sample_rate_t sample_rate) {
-	dsp::Signal<_sample_t> signal;
-	signal.sample_rate = sample_rate;
+template<typename _frame_t>
+std::vector<_frame_t> generate_sin_signal(const dsp::frequency_hz_t frequency, const dsp::sample_rate_t sample_rate) {
+	using sample_type = std::conditional_t<is_frame_v<_frame_t>, typename _frame_t::sample_type, _frame_t>;
 
-	const dsp::time_t period = 1.0 / frequency * 1000.0;
+	const dsp::time_ms_floating_t period = dsp::utils::frequency_to_period(frequency);
 	const size_t num_samples = dsp::utils::sample_index_from_time(sample_rate, period);
 	std::cout << "period: " << period << ", num_samples: " << num_samples << "\n";
 
-	signal.samples.reserve(num_samples);
+	std::vector<_frame_t> samples;
+	samples.reserve(num_samples);
 
-	using s = typename decltype(signal)::sample_type::sample_type;
-	s curr_sample = {};
+	sample_type curr_sample;
 
 	for (size_t sample_index = 0; sample_index < num_samples; sample_index++) {
-		curr_sample = static_cast<s>(std::sin(frequency * 2 * std::numbers::pi * (static_cast<double>(sample_index) / sample_rate)));
+		curr_sample = static_cast<sample_type>(std::sin(frequency * 2 * std::numbers::pi * (static_cast<double>(sample_index) / sample_rate)));
 
-		signal.samples.emplace_back(curr_sample, curr_sample);
+		if constexpr (is_frame_v<_frame_t>) {
+			samples.emplace_back(curr_sample, curr_sample);
+		} else {
+			samples.emplace_back(curr_sample);
+		}
 	}
 
-	return signal;
+	return samples;
 }
 
 // I don't think that this is actually the right way to do it,
@@ -40,15 +44,16 @@ enum class SawtoothGenerationStrategy {
 	PHASE_ACCUMULATOR = 1,
 };
 
-template<typename _sample_t>
-dsp::Signal<_sample_t> generate_sawtooth_signal(const dsp::frequency_hz_t fundamental_frequency, const uint16_t num_harmonics, const dsp::sample_rate_t sample_rate) {
-	dsp::Signal<_sample_t> signal(sample_rate);
+// this clearly ain't finished so don't use it
+template<typename _frame_t>
+std::vector<_frame_t> generate_sawtooth_signal(const dsp::frequency_hz_t fundamental_frequency, const uint16_t num_harmonics, const dsp::sample_rate_t sample_rate) {
+	std::vector<_frame_t> samples;
 
 	// TODO reserve proper num frames and calculate proper num samples
-	signal.samples.reserve(1);
+	samples.reserve(1);
 	size_t num_samples = 1;
 
-	_sample_t curr_sample = 0.0;
+	_frame_t curr_sample;
 
 	for (size_t sample_index = 0; sample_index < num_samples; sample_index++) {
 		for (size_t harmonic_num = 1; harmonic_num <= num_harmonics; harmonic_num++) {
@@ -58,6 +63,6 @@ dsp::Signal<_sample_t> generate_sawtooth_signal(const dsp::frequency_hz_t fundam
 		}
 	}
 
-	return signal;
+	return samples;
 }
 }
